@@ -1,0 +1,41 @@
+\documentclass[a4paper,11pt,final]{article}
+\usepackage{fancyvrb, color, graphicx, hyperref, amsmath, url}
+\usepackage{palatino}
+\usepackage{pygments}
+\usepackage[a4paper,text={16.5cm,25.2cm},centering]{geometry}
+
+\hypersetup  
+{   pdfauthor = {Bruno Domingues e Michel Moraes},
+  pdftitle={Autocomplete},
+  colorlinks=TRUE,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1.2ex}
+
+
+        
+\title{Projeto Final de NLP - Autocomplete}
+\author{Bruno Domingues e Michel Moraes}
+
+\begin{document}
+\maketitle
+
+\section{Introdução}
+
+O uso de abreviações e atalhos na hora de digitar se encontra cada vez mais presente no dia a dia: seja ao mandar mensagens, seja ao escrever textos ou até mesmo para pesquisar na internet.
+A partir deste desejo de economizar tempo, surgiram diversas ferramentas capazes de completar frases e palavras, conhecidas geralmente como autocomplete e autosuggest.
+
+Com base no aumento pela busca de ferramentas deste gênero, optou-se por fazer uma ferramenta que opera de forma similar ao Google: digita-se algumas palavras, e a ferramenta retorna quais as próximas palavras que podem completar a frase.
+
+<<>>=
+# Codigo vai aqui dentro, pode utilizar mais de um
+@
+
+\end{document}
+
+
+

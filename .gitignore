@@ -1,3 +1,6 @@
 .ipynb_checkpoints/
 data/english_sentences*
 data/*.tsv
+relatorio/*.aux
+relatorio/*.log
+relatorio/*.out
