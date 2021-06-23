@@ -1,6 +1,7 @@
 .ipynb_checkpoints/
-data/english_sentences*
-data/*.tsv
+data/
 relatorio/*.aux
+relatorio/*.fdb_latexmk
+relatorio/*.fls
 relatorio/*.log
 relatorio/*.out
