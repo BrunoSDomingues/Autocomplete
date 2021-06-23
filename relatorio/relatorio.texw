@@ -24,16 +24,90 @@
 \begin{document}
 \maketitle
 
+\section{Abstract}
+
+Nos dias de hoje, quase todos os textos que escrevemos no cotidiano, são digitados em alguma plataforma virtual, sendo aplicativos de mensagem texto, e redes sociais, o exemplo mais comum, já que uma grande parte das pessoas manda mensagens de texto durante todo o dia, tanto para assuntos pessoais, ou profissionais, quanto como um meio de entretenimento. Relatórios e documentos extensos muitas vezes são redigidos em um computador, ou dispositivo móvel, também.
+
+Uma ferramenta que pode agilizar bastante na hora de escrever um texto é sugestor automático de palavras, comumente visto em sites como o Google, e em teclados de dispositivos móveis. Desta forma, neste relatório se encontra uma análise de um dataset de frases, e buscamos responder se é possível fazer um sugestor automático simples com algumas ferramentas de Processamento Linguagem Natural com Python.
+
+Palavras-chave: Processamento de linguagem natural. Autosuggest. Autocomplete. Ngramas.
+
+
 \section{Introdução}
 
-O uso de abreviações e atalhos na hora de digitar se encontra cada vez mais presente no dia a dia: seja ao mandar mensagens, seja ao escrever textos ou até mesmo para pesquisar na internet.
+O uso de abreviações e atalhos na hora de digitar se encontra cada vez mais presente no dia a dia: seja ao mandar mensagens, escrever textos ou até mesmo para pesquisar na internet.
+
 A partir deste desejo de economizar tempo, surgiram diversas ferramentas capazes de completar frases e palavras, conhecidas geralmente como autocomplete e autosuggest.
 
-Com base no aumento pela busca de ferramentas deste gênero, optou-se por fazer uma ferramenta que opera de forma similar ao Google: digita-se algumas palavras, e a ferramenta retorna quais as próximas palavras que podem completar a frase.
+O autosuggest pode não só economizar tempo na hora de escrever grandes textos, ou rápidas mensagens, mas também diminui a quantidade de erros ortográficos, já que um bom autosuggest vai acertar nas sugestões de palavras na maioria das vezes, e essas não possuem erros ortográficos, ou de digitação.
 
-<<>>=
-# Codigo vai aqui dentro, pode utilizar mais de um
-@
+Tendo em vista as várias vantagens deste tipo de ferramenta, tentaremos criar um sugestor automático, utilizando um dataset e ferramentas como as bibliotecas Pandas, e NLTK do python.
+
+\section{Metodologia}
+\section{Dataset}
+
+O primeiro passo para tentar construir um autocomplete, é reunir um grande conjunto de frases na língua selecionada, o Inglês. Deste modo, o dataset utilizado para realizar esta etapa de análise, para um futuro treinamento, foi o “Old-Newspapers”, encontrado no site Kaggle.
+
+Este dataset contém um grande número de frases, retiradas de jornais e blogs, em diversas línguas. Além da frase é possível encontrar informações como a data de publicação, e de onde o texto foi retirado, mas para este caso, utilizaremos apenas as frases.
+
+O primeiro passo foi filtrar as frases por língua. No caso a língua desejada era a língua inglesa, que possui quase um milhão de frases neste dataset, e, portanto, é o suficiente para este caso.
+
+Algumas limpezas importantes do dataset também foram feitas, para evitar interferência nos resultados. Todas as URL’s foram retiradas das frases, utilizando regex. Além disso, caracteres especiais foram removidos também, assim como frases que possuem números. 
+
+Para finalizar a etapa de processamento, trocamos “!” e “?” por “.”, já que o interesse é nas palavras que sucedem outras, e não no significado das frases, e separamos as frases por “.”. 
+
+Apóstrofes em palavras foram trocadas por “-” para evitar separações indesejadas de palavras como “Don’t” e "her' s" na tokenização.
+	
+
+
+\section{N-gramas}
+
+N-gramas é um conceito utilizado em linguística computacional e probabilidade, ele representa um conjunto de itens de um determinado texto ou fala, podendo ser sílabas, fonemas, palavras, por exemplo. Um N-grama de dois itens é chamado de bigrama, enquanto um de três itens, trigrama, e assim por diante.
+	
+Um N-grama pode possuir algumas aplicações diferentes, nas áreas de  probabilidade, teoria da comunicação, linguística computacional (processamento estatístico de linguagem natural), biologia computacional e compressão de dados, normalmente usado para prever o próximo item de uma sequência.
+
+A maior vantagem do modelo de N-gramas é a sua simplicidade de entendimento e implementação, além do seu alto acerto. 
+
+
+Para o nosso caso usaremos N-gramas de palavras para tentar qual palavra tem maior probabilidade de suceder as já digitadas. Desta maneira criamos listas com todos os bigramas, trigramas, e quadrigramas das frases analisadas, removendo todos os N-gramas compostos somente por stopwords da biblioteca NLTK.
+
+Probabilidade de uma palavra:
+
+Ou seja, suas ocorrências dividido pelo número total de palavras. 
+
+Desta maneira, é possível que uma palavra que não se encontra no texto gere uma probabilidade 0 para um determinado N-grama. 
+
+Desta maneira, se a palavra não existe, precisamos adicionar artificialmente. Portanto, adiciona-se 1 (Laplace Smoothing) a todos os membros do vocabulário:
+
+
+\section{Preditor}
+
+Para realizar a predição da próxima palavra a ser digitada em um texto, uma função que recebe como entrada uma string, um N que define o número de itens do N-grama a ser utilizado, e um n que especifica o número de palavras a serem sugeridas, foi criada.
+
+Utilizando um N=3 (trigramas) como exemplo, e um n=5, a função pega as últimas duas palavras de uma frase, e percorre a lista de trigramas verificando quais trigramas iniciados por essas palavras têm maior probabilidade, retornando a terceira palavra desse trigrama. Como o n adotado foi 5, o modelo retornará as 5 palavras de maior probabilidade dentro do contexto das frases utilizadas.
+
+
+\section{Resultados}
+
+Para frases simples com o mesmo número de palavras do modelo selecionado (1 para bigramas, por exemplo), o modelo teve um nível de acerto bastante alto, além de não dar erro ao não encontrar o N-grama inserido.
+
+EXEMPLOS
+
+O verdadeiro problema deste modelo foi para frases grandes, já que o máximo que ele utiliza para a predição são as 3 últimas palavras da frase, ignorando completamente o contexto anterior. 
+
+EXEMPLOS
+
+
+\section{Conclusão e Trabalhos Futuros}
+
+Desta maneira, é possível concluir que utilizando a biblioteca NLTK, em conjunto com um dataset rico em frases de uma determinada língua, e o modelo de N-gramas, é possível fazer um preditor de palavras de texto bastante eficaz, e preciso, podendo facilmente ser utilizado na prática.
+
+Analisando os resultados é possível afirmar, também que este preditor pode ser melhorado ao considerar N-gramas maiores, e as frases grande como um todo, e não apenas o seu último N-grama.
+
+Além disso, seria possível adicionar uma feature de input em tempo real, para que o sugestor já tente prever a próxima palavra de um texto no mesmo tempo em que ele está sendo digitado.
+
+Para fazer o mesmo autocomplete para outras línguas, seria necessário apenas fazer uma limpeza diferente nas frases, como cada língua possui peculiaridades a serem consideradas, mas não é uma tarefa muito complexa.
+
 
 \end{document}
 
