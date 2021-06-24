@@ -2,6 +2,7 @@
 \usepackage{fancyvrb, color, graphicx, hyperref, amsmath, url}
 \usepackage{palatino}
 \usepackage{pygments}
+\usepackage[T1]{fontenc}
 \usepackage[a4paper,text={16.5cm,25.2cm},centering]{geometry}
 
 \hypersetup  
@@ -30,7 +31,7 @@ Nos dias de hoje, quase todos os textos que escrevemos no cotidiano, são digita
 
 Uma ferramenta que pode agilizar bastante na hora de escrever um texto é sugestor automático de palavras, comumente visto em sites como o Google, e em teclados de dispositivos móveis. Desta forma, neste relatório se encontra uma análise de um dataset de frases, e buscamos responder se é possível fazer um sugestor automático simples com algumas ferramentas de Processamento Linguagem Natural com Python.
 
-Palavras-chave: Processamento de linguagem natural. Autosuggest. Autocomplete. Ngramas.
+Palavras-chave: Processamento de linguagem natural. Autosuggest. Autocomplete. N-gramas.
 
 
 \section{Introdução}
@@ -41,75 +42,529 @@ A partir deste desejo de economizar tempo, surgiram diversas ferramentas capazes
 
 O autosuggest pode não só economizar tempo na hora de escrever grandes textos, ou rápidas mensagens, mas também diminui a quantidade de erros ortográficos, já que um bom autosuggest vai acertar nas sugestões de palavras na maioria das vezes, e essas não possuem erros ortográficos, ou de digitação.
 
-Tendo em vista as várias vantagens deste tipo de ferramenta, tentaremos criar um sugestor automático, utilizando um dataset e ferramentas como as bibliotecas Pandas, e NLTK do python.
+Tendo em vista as várias vantagens deste tipo de ferramenta, optou-se por desenvolvê-la, utilizando um dataset e ferramentas de Python tanto para processar os dados quanto para montar a ferramenta.
 
-\section{Metodologia}
-\section{Dataset}
+\section{Dados e pré-processamento}
 
-O primeiro passo para tentar construir um autocomplete, é reunir um grande conjunto de frases na língua selecionada, o Inglês. Deste modo, o dataset utilizado para realizar esta etapa de análise, para um futuro treinamento, foi o “Old-Newspapers”, encontrado no site Kaggle.
+O primeiro passo para tentar construir um autocomplete é reunir um grande conjunto de frases. Para atingir tal objetivo, utilizou-se um dataset [1] que contém artigos de jornais diversos e textos de blogs.
+O dataset possui fontes de diversas línguas, e para este desenvolvimento optou-se por utilizar a língua inglesa.
 
-Este dataset contém um grande número de frases, retiradas de jornais e blogs, em diversas línguas. Além da frase é possível encontrar informações como a data de publicação, e de onde o texto foi retirado, mas para este caso, utilizaremos apenas as frases.
+Além do texto, o dataset disponibiliza também a data de publicação e a fonte do texto (geralmente um link para o artigo/blog); no entanto, estas informações não são relevantes, e podem ser descartadas.
 
-O primeiro passo foi filtrar as frases por língua. No caso a língua desejada era a língua inglesa, que possui quase um milhão de frases neste dataset, e, portanto, é o suficiente para este caso.
+\subsection{Criando o dataframe inicial}
 
-Algumas limpezas importantes do dataset também foram feitas, para evitar interferência nos resultados. Todas as URL’s foram retiradas das frases, utilizando regex. Além disso, caracteres especiais foram removidos também, assim como frases que possuem números. 
+O código abaixo mostra o processo de importar o dataset e filtrar por língua. Visto que o arquivo original era muito grande, utilizou-se a biblioteca Dask para processar o arquivo, uma vez que ela possui ferramentas e estrutura dedicada para tal.
 
-Para finalizar a etapa de processamento, trocamos “!” e “?” por “.”, já que o interesse é nas palavras que sucedem outras, e não no significado das frases, e separamos as frases por “.”. 
 
-Apóstrofes em palavras foram trocadas por “-” para evitar separações indesejadas de palavras como “Don’t” e "her' s" na tokenização.
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Imports utilizados}
+\PY{k+kn}{import} \PY{n+nn}{dask}\PY{n+nn}{.}\PY{n+nn}{dataframe} \PY{k}{as} \PY{n+nn}{dd}
+\PY{k+kn}{import} \PY{n+nn}{pandas} \PY{k}{as} \PY{n+nn}{pd}
+\PY{k+kn}{import} \PY{n+nn}{glob}\PY{o}{,} \PY{n+nn}{re}\PY{o}{,} \PY{n+nn}{os}
+
+\PY{c+c1}{\PYZsh{} Path do dataset}
+\PY{n}{cwd} \PY{o}{=} \PY{n}{os}\PY{o}{.}\PY{n}{getcwd}\PY{p}{(}\PY{p}{)}\PY{o}{.}\PY{n}{replace}\PY{p}{(}\PY{l+s+sa}{r}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{/relatorio}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}
+\PY{n}{path} \PY{o}{=} \PY{n}{os}\PY{o}{.}\PY{n}{path}\PY{o}{.}\PY{n}{join}\PY{p}{(}\PY{n}{cwd}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{data}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}
+\PY{n}{filepath} \PY{o}{=} \PY{n}{os}\PY{o}{.}\PY{n}{path}\PY{o}{.}\PY{n}{join}\PY{p}{(}\PY{n}{path}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{old\PYZhy{}newspaper.tsv}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Lendo os dados do arquivo tsv}
+\PY{n}{ddf} \PY{o}{=} \PY{n}{dd}\PY{o}{.}\PY{n}{read\PYZus{}csv}\PY{p}{(}\PY{n}{filepath}\PY{p}{,} \PY{n}{sep}\PY{o}{=}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+se}{\PYZbs{}t}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Selecionando somente em inglês e somente a coluna Text}
+\PY{c+c1}{\PYZsh{} pois os outros dados não serão utilizados}
+\PY{n}{df} \PY{o}{=} \PY{n}{ddf}\PY{p}{[}\PY{n}{ddf}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Language}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{==} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{English}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}
+\PY{n}{df} \PY{o}{=} \PY{n}{df}\PY{p}{[}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{p}{]}
+\end{Verbatim}
+
+
+A biblioteca Dask funciona separando o arquivo em partições diversas, o que facilita o processamento. No entanto, ao filtrar por língua foram geradas partições vazias.
+Como elas não serão utilizadas, elas foram removidas. Após sua remoção, converteu-se o dataframe do Dask para um dataframe do Pandas, visto que algumas chamadas de função não são as mesmas.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Limpeza de particoes vazias}
+\PY{c+c1}{\PYZsh{} https://stackoverflow.com/questions/47812785/remove\PYZhy{}empty\PYZhy{}partitions\PYZhy{}in\PYZhy{}dask}
+\PY{k}{def} \PY{n+nf}{cull\PYZus{}empty\PYZus{}partitions}\PY{p}{(}\PY{n}{df}\PY{p}{)}\PY{p}{:}
+    \PY{n}{ll} \PY{o}{=} \PY{n+nb}{list}\PY{p}{(}\PY{n}{df}\PY{o}{.}\PY{n}{map\PYZus{}partitions}\PY{p}{(}\PY{n+nb}{len}\PY{p}{)}\PY{o}{.}\PY{n}{compute}\PY{p}{(}\PY{p}{)}\PY{p}{)}
+    \PY{n}{df\PYZus{}delayed} \PY{o}{=} \PY{n}{df}\PY{o}{.}\PY{n}{to\PYZus{}delayed}\PY{p}{(}\PY{p}{)}
+    \PY{n}{df\PYZus{}delayed\PYZus{}new} \PY{o}{=} \PY{n+nb}{list}\PY{p}{(}\PY{p}{)}
+    \PY{n}{pempty} \PY{o}{=} \PY{k+kc}{None}
+    
+    \PY{k}{for} \PY{n}{ix}\PY{p}{,} \PY{n}{n} \PY{o+ow}{in} \PY{n+nb}{enumerate}\PY{p}{(}\PY{n}{ll}\PY{p}{)}\PY{p}{:}
+        \PY{k}{if} \PY{l+m+mi}{0} \PY{o}{==} \PY{n}{n}\PY{p}{:}
+            \PY{n}{pempty} \PY{o}{=} \PY{n}{df}\PY{o}{.}\PY{n}{get\PYZus{}partition}\PY{p}{(}\PY{n}{ix}\PY{p}{)}
+            
+        \PY{k}{else}\PY{p}{:}
+            \PY{n}{df\PYZus{}delayed\PYZus{}new}\PY{o}{.}\PY{n}{append}\PY{p}{(}\PY{n}{df\PYZus{}delayed}\PY{p}{[}\PY{n}{ix}\PY{p}{]}\PY{p}{)}
+            
+    \PY{k}{if} \PY{n}{pempty} \PY{o+ow}{is} \PY{o+ow}{not} \PY{k+kc}{None}\PY{p}{:}
+        \PY{n}{df} \PY{o}{=} \PY{n}{dd}\PY{o}{.}\PY{n}{from\PYZus{}delayed}\PY{p}{(}\PY{n}{df\PYZus{}delayed\PYZus{}new}\PY{p}{,} \PY{n}{meta}\PY{o}{=}\PY{n}{pempty}\PY{p}{)}
+        
+    \PY{k}{return} \PY{n}{df}
+
+\PY{n}{df} \PY{o}{=} \PY{n}{cull\PYZus{}empty\PYZus{}partitions}\PY{p}{(}\PY{n}{df}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Convertendo em um dataframe do Pandas novamente}
+\PY{n}{data} \PY{o}{=} \PY{n}{df}\PY{o}{.}\PY{n}{compute}\PY{p}{(}\PY{p}{)}
+\end{Verbatim}
+
+
+O dataframe possui pouco mais de 1 milhão de artigos e blogs distintos, o que é suficiente para a análise.
+
+\subsection{Limpeza e processamento dos dados}
+
+Para poder criar a ferramenta, deve-se primeiro fazer uma limpeza no dataframe, visto que há presença de caracteres especiais, URLs e outros que podem atrapalhar a predição.
+
+Primeiro, removeu-se todas as URLs presentes no texto.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Removendo URLs}
+\PY{k}{def} \PY{n+nf}{limpa\PYZus{}url}\PY{p}{(}\PY{n}{texto}\PY{p}{)}\PY{p}{:}
+    \PY{c+c1}{\PYZsh{} Regex obtida de https://www.geeksforgeeks.org/python\PYZhy{}check\PYZhy{}url\PYZhy{}string/}
+    \PY{n}{pattern} \PY{o}{=} \PY{l+s+sa}{r}\PY{l+s+s2}{\PYZdq{}\PYZdq{}\PYZdq{}}
+\PY{l+s+s2}{        (?i)  \PYZsh{} Ignore case.}
+\PY{l+s+s2}{        }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{b  \PYZsh{} Inicio de palavra.}
+\PY{l+s+s2}{        (?:}
+\PY{l+s+s2}{            https?://}
+\PY{l+s+s2}{        |}
+\PY{l+s+s2}{            www}
+\PY{l+s+s2}{            }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{d}\PY{l+s+s2}{\PYZob{}}\PY{l+s+s2}{0,3\PYZcb{}}
+\PY{l+s+s2}{            [.]}
+\PY{l+s+s2}{        |}
+\PY{l+s+s2}{            [a\PYZhy{}z0\PYZhy{}9.}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZhy{}]+}
+\PY{l+s+s2}{            [.]}
+\PY{l+s+s2}{            [a\PYZhy{}z]}\PY{l+s+s2}{\PYZob{}}\PY{l+s+s2}{2,4\PYZcb{}}
+\PY{l+s+s2}{            /}
+\PY{l+s+s2}{        )}
+\PY{l+s+s2}{        (?:}
+\PY{l+s+s2}{            [\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s()\PYZlt{}\PYZgt{}]+}
+\PY{l+s+s2}{        |}
+\PY{l+s+s2}{            }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{(}
+\PY{l+s+s2}{            (?:}
+\PY{l+s+s2}{                [\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s()\PYZlt{}\PYZgt{}]+}
+\PY{l+s+s2}{            |}
+\PY{l+s+s2}{                }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{(}
+\PY{l+s+s2}{                [\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s()\PYZlt{}\PYZgt{}]+}
+\PY{l+s+s2}{                }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{)}
+\PY{l+s+s2}{            )*}
+\PY{l+s+s2}{            }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{)}
+\PY{l+s+s2}{        )+}
+\PY{l+s+s2}{        (?:}
+\PY{l+s+s2}{            }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{(}
+\PY{l+s+s2}{            (?:}
+\PY{l+s+s2}{                [\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s()\PYZlt{}\PYZgt{}]+}
+\PY{l+s+s2}{            |}
+\PY{l+s+s2}{                }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{(}
+\PY{l+s+s2}{                [\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s()\PYZlt{}\PYZgt{}]+}
+\PY{l+s+s2}{                }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{)}
+\PY{l+s+s2}{            )*}
+\PY{l+s+s2}{            }\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{)}
+\PY{l+s+s2}{        |}
+\PY{l+s+s2}{            [\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s`!()}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{[}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{]}\PY{l+s+si}{\PYZob{}\PYZcb{}}\PY{l+s+s2}{;:}\PY{l+s+s2}{\PYZsq{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{.,\PYZlt{}\PYZgt{}?«»“”‘’]}
+\PY{l+s+s2}{        )}
+\PY{l+s+s2}{    }\PY{l+s+s2}{\PYZdq{}\PYZdq{}\PYZdq{}}
+    \PY{n}{repl} \PY{o}{=} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZdq{}}
+    \PY{n}{matcher} \PY{o}{=} \PY{n}{re}\PY{o}{.}\PY{n}{compile}\PY{p}{(}\PY{n}{pattern}\PY{p}{,} \PY{n}{re}\PY{o}{.}\PY{n}{VERBOSE}\PY{p}{)}
+    \PY{k}{return} \PY{n}{matcher}\PY{o}{.}\PY{n}{sub}\PY{p}{(}\PY{n}{repl}\PY{p}{,} \PY{n}{texto}\PY{p}{)}
+
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{limpa\PYZus{}url}\PY{p}{(}\PY{n}{t}\PY{p}{)}\PY{p}{)}
+\end{Verbatim}
+
+
+Em seguida, removeu-se caracteres especiais. Vale notar que caracteres como pontos de interrogação e de exclamação devem ser conservados, pois ainda indicam o fim de uma frase, somente mudando sua entonação.
+Para conservá-los, substituiu-se estes caracteres pelo ponto final, visto que a entonação da frase não é o objetivo desta análise.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Removendo caracteres especiais \PYZdq{}@, \PYZsh{}, \PYZdl{}, \PYZpc{}, \PYZam{}, *, `\PYZdq{}}
+\PY{n}{special} \PY{o}{=} \PY{l+s+sa}{r}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{[}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{@}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZsh{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZdl{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZpc{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZam{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{*}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{`]}\PY{l+s+s2}{\PYZdq{}}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{re}\PY{o}{.}\PY{n}{sub}\PY{p}{(}\PY{n}{special}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{n}{t}\PY{p}{)}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Fazendo replace de ? e ! por .}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{replace}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{?}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{.}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{p}{)}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{replace}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{!}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{.}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{p}{)}
+\end{Verbatim}
+
+
+Em seguida, removeu-se todos os caracteres que não fossem letras, espaços, pontos finais e apóstrofes.
+As apóstrofes foram conservadas pois são muito utilizadas para junção de duas palavras em uma só na língua inglesa (como "don't" e "I'm").
+
+No entanto, na hora de tokenizar estas palavras, o tokenizador as separa de forma inadequada ("don't" -> "do", "n't").
+Assim, substituiu-se as apóstrofes pelo hífen, pois assim o tokenizador interpreta como uma palavra só. 
+Esta substituição foi realizada após a remoção dos caracteres, de modo a garantir que não houvessem hífens novos que pudessem gerar problemas na hora de substituir o hífen de volta pela apóstrofe na predição.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Removendo pontuações diversas exceto apostrofes e pontos finais}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{re}\PY{o}{.}\PY{n}{sub}\PY{p}{(}\PY{l+s+sa}{r}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{[\PYZca{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{w}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{\PYZsq{}}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{.]}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{n}{t}\PY{p}{)}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Replace de apostrofes por traços para conservar palavras}
+\PY{c+c1}{\PYZsh{} como don\PYZsq{}t e i\PYZsq{}m na hora de tokenizar}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{replace}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+se}{\PYZbs{}\PYZsq{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZhy{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{p}{)}
+\end{Verbatim}
+
+
+Após este processamento inicial, o dataframe possui frases que estão quase prontas. 
+No entanto, como mencionado, a maior parte são artigos e textos de blogs, que possuem mais de uma frase.
+
+Para separar as frases, utilizou-se um split usando o ponto final como caractere para definir onde uma frase acaba.
+Como a função split gera uma lista com as strings separadas, transformou-se esta lista em novas linhas do dataframe utilizando a função explode do Pandas.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Fazendo o split das frases por .}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{split}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{.}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Comando explode para separar as listas em novas linhas do dataframe}
+\PY{n}{data} \PY{o}{=} \PY{n}{data}\PY{o}{.}\PY{n}{explode}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}
+\end{Verbatim}
+
+
+O dataframe agora possui apenas frases (e expandiu seu tamanho de 1 milhão de linhas para 3 milhões), pode-se continuar com a limpeza.
+A etapa seguinte foi a remoção de espaços no início e no fim da frase, e também a remoção de espaços excessivos.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Removendo espaços em branco no início e no fim da frase}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{strip}\PY{p}{(}\PY{p}{)}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Removendo tabs, newlines e espaços em branco em excesso}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{replace}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{/}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s}\PY{l+s+s2}{\PYZbs{}}\PY{l+s+s2}{s+/g}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{ }\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{p}{)}
+\end{Verbatim}
+
+
+A última etapa de limpeza foi a remoção de frases que possuem números no meio.
+Optou-se por remover completamente essas frases, pois elas podem ser incoerentes caso sejam removidos apenas os números (por exemplo: "it costs 20 dollars" viraria "it costs dollars", o que pode não fazer muito sentido).
+No caso das URLs optou-se por apenas remover as URLs, pois há menos chances de ter problema de coerência.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Removendo frases que contém números}
+\PY{k}{def} \PY{n+nf}{hasNumbers}\PY{p}{(}\PY{n}{text}\PY{p}{)}\PY{p}{:}
+    \PY{k}{return} \PY{n+nb}{any}\PY{p}{(}\PY{n}{char}\PY{o}{.}\PY{n}{isdigit}\PY{p}{(}\PY{p}{)} \PY{k}{for} \PY{n}{char} \PY{o+ow}{in} \PY{n}{text}\PY{p}{)}
+
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{hasNumbers}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{hasNumbers}\PY{p}{(}\PY{n}{t}\PY{p}{)}\PY{p}{)}
+\PY{n}{data} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{hasNumbers}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{==} \PY{k+kc}{False}\PY{p}{]}
+\end{Verbatim}
+
+
+Por fim, removeu-se as frases vazias, filtrou-se as frases que possuem entre 7 e 12 palavras (de modo a não ter frases nem muito pequenas e nem muito grandes), e transformou-se as frases para lowercase.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Removendo frases vazias}
+\PY{n}{data} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{!=} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}
+
+\PY{c+c1}{\PYZsh{} Mantendo frases que possuem entre 7 e 12 palavras}
+\PY{n}{data} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{str}\PY{o}{.}\PY{n}{split}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{ }\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{o}{.}\PY{n}{str}\PY{o}{.}\PY{n}{len}\PY{p}{(}\PY{p}{)} \PY{o}{\PYZgt{}}\PY{o}{=} \PY{l+m+mi}{7}\PY{p}{]}
+\PY{n}{data} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{str}\PY{o}{.}\PY{n}{split}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{ }\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{o}{.}\PY{n}{str}\PY{o}{.}\PY{n}{len}\PY{p}{(}\PY{p}{)} \PY{o}{\PYZlt{}}\PY{o}{=} \PY{l+m+mi}{12}\PY{p}{]}
+
+\PY{c+c1}{\PYZsh{} Lowercase}
+\PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{apply}\PY{p}{(}\PY{k}{lambda} \PY{n}{t}\PY{p}{:} \PY{n}{t}\PY{o}{.}\PY{n}{lower}\PY{p}{(}\PY{p}{)}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Reset index}
+\PY{n}{data}\PY{o}{.}\PY{n}{reset\PYZus{}index}\PY{p}{(}\PY{n}{inplace}\PY{o}{=}\PY{k+kc}{True}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Transforming to list}
+\PY{n}{sentences} \PY{o}{=} \PY{n}{data}\PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Text}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]}\PY{o}{.}\PY{n}{tolist}\PY{p}{(}\PY{p}{)}
+\end{Verbatim}
+
+
+Com as frases disponíveis, pode-se prosseguir para a construção da ferramenta.
+
+\section{Montando a ferramenta}
+
+\subsection{N-gramas}
+
+Para construir a ferramenta será utilizada um modelo de N-gramas.
+
+Um N-grama é um conceito utilizado em linguística computacional e probabilidade, e representa um conjunto de itens de um determinado texto ou fala, podendo ser sílabas, fonemas, palavras, por exemplo. 
+Um N-grama de dois itens é chamado de bigrama, um de três itens é chamado de trigrama, etc.
 	
+Os N-gramas podem possuir algumas aplicações diferentes, e são muito utilizados nas áreas de:
+
+\begin{itemize}
+    \item probabilidade;
+    \item teoria da comunicação;
+    \item linguística computacional (processamento estatístico de linguagem natural);
+    \item biologia computacional;
+    \item compressão de dados.
+\end{itemize}
+
+\subsubsection{Modelo de predição}
+
+De modo a construir nosso preditor, utilizará-se um modelo que segue as seguintes etapas:
+
+\begin{enumerate}
+    \item gera-se todos os N-gramas de 2 a 4 itens das frases de nosso dataframe;
+    \item calcula-se as probabilidades de cada N-grama estar no texto;
+    \item gera-se os N-gramas da nossa frase de entrada de acordo com o modelo escolhido;
+    \item encontra-se os primeiros N-gramas mais prováveis de serem o N-grama buscado;
+    \item pega-se a última palavra deles para preencher a frase de entrada.
+\end{enumerate}
+
+Contudo, há palavras que são extremamente frequentes na língua inglesa (e em outras línguas).
+Essas são chamadas de stopwords, e para nosso modelo, os N-gramas compostos exclusivamente por stopwords serão descartados.
+A biblioteca NLTK possui os stopwords da língua inglesa disponível para esta remoção.
+
+A maior vantagem do modelo de N-gramas é a sua simplicidade de entendimento e implementação.
+No entanto, sua maior desvantagem é que ele pode nem sempre acertar o que estava sendo buscado.
+
+O código abaixo mostra o desenvolvimento da etapa 1 do modelo.
 
 
-\section{N-gramas}
 
-N-gramas é um conceito utilizado em linguística computacional e probabilidade, ele representa um conjunto de itens de um determinado texto ou fala, podendo ser sílabas, fonemas, palavras, por exemplo. Um N-grama de dois itens é chamado de bigrama, enquanto um de três itens, trigrama, e assim por diante.
-	
-Um N-grama pode possuir algumas aplicações diferentes, nas áreas de  probabilidade, teoria da comunicação, linguística computacional (processamento estatístico de linguagem natural), biologia computacional e compressão de dados, normalmente usado para prever o próximo item de uma sequência.
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Imports}
+\PY{k+kn}{from} \PY{n+nn}{nltk} \PY{k+kn}{import} \PY{n}{word\PYZus{}tokenize}
+\PY{k+kn}{from} \PY{n+nn}{nltk}\PY{n+nn}{.}\PY{n+nn}{util} \PY{k+kn}{import} \PY{n}{ngrams}
+\PY{k+kn}{from} \PY{n+nn}{nltk}\PY{n+nn}{.}\PY{n+nn}{corpus} \PY{k+kn}{import} \PY{n}{stopwords}
 
-A maior vantagem do modelo de N-gramas é a sua simplicidade de entendimento e implementação, além do seu alto acerto. 
+\PY{c+c1}{\PYZsh{} Lista dos N\PYZhy{}gramas}
+\PY{n}{bigrams} \PY{o}{=} \PY{p}{[}\PY{p}{]}
+\PY{n}{trigrams} \PY{o}{=} \PY{p}{[}\PY{p}{]}
+\PY{n}{fourgrams} \PY{o}{=} \PY{p}{[}\PY{p}{]}
+
+\PY{c+c1}{\PYZsh{} Stopwords da língua inglesa}
+\PY{n}{stop\PYZus{}words} \PY{o}{=} \PY{n+nb}{set}\PY{p}{(}\PY{n}{stopwords}\PY{o}{.}\PY{n}{words}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{english}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}\PY{p}{)}
+
+\PY{c+c1}{\PYZsh{} Iterando sobre cada frase}
+\PY{k}{for} \PY{n}{sentence} \PY{o+ow}{in} \PY{n}{sentences}\PY{p}{:}
+    \PY{c+c1}{\PYZsh{} Tokenizando as frases}
+    \PY{n}{words} \PY{o}{=} \PY{n}{word\PYZus{}tokenize}\PY{p}{(}\PY{n}{sentence}\PY{p}{)}
+    
+    \PY{c+c1}{\PYZsh{} Extendendo a lista dos N\PYZhy{}gramas com as palavras}
+    \PY{n}{bigrams}\PY{o}{.}\PY{n}{extend}\PY{p}{(}\PY{n+nb}{list}\PY{p}{(}\PY{n}{ngrams}\PY{p}{(}\PY{n}{words}\PY{p}{,} \PY{l+m+mi}{2}\PY{p}{)}\PY{p}{)}\PY{p}{)}
+    \PY{n}{trigrams}\PY{o}{.}\PY{n}{extend}\PY{p}{(}\PY{n+nb}{list}\PY{p}{(}\PY{n}{ngrams}\PY{p}{(}\PY{n}{words}\PY{p}{,} \PY{l+m+mi}{3}\PY{p}{)}\PY{p}{)}\PY{p}{)}
+    \PY{n}{fourgrams}\PY{o}{.}\PY{n}{extend}\PY{p}{(}\PY{n+nb}{list}\PY{p}{(}\PY{n}{ngrams}\PY{p}{(}\PY{n}{words}\PY{p}{,} \PY{l+m+mi}{4}\PY{p}{)}\PY{p}{)}\PY{p}{)}   
+
+\PY{c+c1}{\PYZsh{} Remove N\PYZhy{}gramas que são compostos exclusivamente por stopwords}
+\PY{k}{def} \PY{n+nf}{remove\PYZus{}stopwords}\PY{p}{(}\PY{n}{ngram}\PY{p}{:} \PY{n+nb}{list}\PY{p}{)}\PY{p}{:}
+    \PY{n}{new\PYZus{}ngram} \PY{o}{=} \PY{p}{[}\PY{p}{]}
+
+    \PY{k}{for} \PY{n}{sequence} \PY{o+ow}{in} \PY{n}{ngram}\PY{p}{:}
+        \PY{c+c1}{\PYZsh{} Assume\PYZhy{}se que o N\PYZhy{}grama é composto por stopwords}
+        \PY{n}{count} \PY{o}{=} \PY{l+m+mi}{0}
+
+        \PY{c+c1}{\PYZsh{} Percorrendo cada palavra do N\PYZhy{}grama}
+        \PY{k}{for} \PY{n}{word} \PY{o+ow}{in} \PY{n}{sequence}\PY{p}{:}
+            \PY{c+c1}{\PYZsh{} Se o N\PYZhy{}grama não tem nenhuma palavra que é uma stopword}
+            \PY{c+c1}{\PYZsh{} o count vira 1; se não, se mantém em zero}
+            \PY{n}{count} \PY{o}{=} \PY{n}{count} \PY{o+ow}{or} \PY{l+m+mi}{0} \PY{k}{if} \PY{n}{word} \PY{o+ow}{in} \PY{n}{stop\PYZus{}words} \PY{k}{else} \PY{n}{count} \PY{o+ow}{or} \PY{l+m+mi}{1}
+
+        \PY{c+c1}{\PYZsh{} Adiciona\PYZhy{}se o N\PYZhy{}grama se ele não for composto por stopwords}
+        \PY{k}{if} \PY{n}{count} \PY{o}{==} \PY{l+m+mi}{1}\PY{p}{:}
+            \PY{n}{new\PYZus{}ngram}\PY{o}{.}\PY{n}{append}\PY{p}{(}\PY{n}{sequence}\PY{p}{)}
+            
+    \PY{k}{return} \PY{n}{new\PYZus{}ngram}
+
+\PY{n}{bigrams} \PY{o}{=} \PY{n}{remove\PYZus{}stopwords}\PY{p}{(}\PY{n}{bigrams}\PY{p}{)}
+\PY{n}{trigrams} \PY{o}{=} \PY{n}{remove\PYZus{}stopwords}\PY{p}{(}\PY{n}{trigrams}\PY{p}{)}
+\PY{n}{fourgrams} \PY{o}{=} \PY{n}{remove\PYZus{}stopwords}\PY{p}{(}\PY{n}{fourgrams}\PY{p}{)}
+\end{Verbatim}
 
 
-Para o nosso caso usaremos N-gramas de palavras para tentar qual palavra tem maior probabilidade de suceder as já digitadas. Desta maneira criamos listas com todos os bigramas, trigramas, e quadrigramas das frases analisadas, removendo todos os N-gramas compostos somente por stopwords da biblioteca NLTK.
+\subsection{Probabilidades}
 
-Probabilidade de uma palavra:
+A fórmula para calcular a probabilidade de um N-grama estar presente em um texto é dada por:
 
-Ou seja, suas ocorrências dividido pelo número total de palavras. 
+$P(N) = \frac{\text{ocorrencias(N-grama)}}{\text{total(N-gramas)}}$
 
-Desta maneira, é possível que uma palavra que não se encontra no texto gere uma probabilidade 0 para um determinado N-grama. 
+Mas e se não houver ocorrências do N-grama no texto? A probabilidade neste caso seria zero.
+Porém, de modo a evitar estes casos, utiliza-se uma técnica de smoothing chamada Add-1 Smoothing (também conhecida como Laplace Smoothing).
 
-Desta maneira, se a palavra não existe, precisamos adicionar artificialmente. Portanto, adiciona-se 1 (Laplace Smoothing) a todos os membros do vocabulário:
+Esta técnica consiste em adicionar 1 ao número de ocorrências de todos os N-gramas (ou seja, adicionar 1 ao númerador da fórmula anterior).
+Para compensar esta adição, devemos contar novamente quantos N-gramas temos, mas há uma forma prática de realizar isto: basta somar a quantidade de N-gramas únicos ao denominador da fórmula.
 
+Assim, a nova probabilidade de um N-grama estar presente no texto é dada por:
 
-\section{Preditor}
+$P(N) = \frac{\text{ocorrencias(N-grama)} + 1}{\text{total(N-gramas)} + \text{total(N-gramas unicos)}}$
 
-Para realizar a predição da próxima palavra a ser digitada em um texto, uma função que recebe como entrada uma string, um N que define o número de itens do N-grama a ser utilizado, e um n que especifica o número de palavras a serem sugeridas, foi criada.
-
-Utilizando um N=3 (trigramas) como exemplo, e um n=5, a função pega as últimas duas palavras de uma frase, e percorre a lista de trigramas verificando quais trigramas iniciados por essas palavras têm maior probabilidade, retornando a terceira palavra desse trigrama. Como o n adotado foi 5, o modelo retornará as 5 palavras de maior probabilidade dentro do contexto das frases utilizadas.
-
-
-\section{Resultados}
-
-Para frases simples com o mesmo número de palavras do modelo selecionado (1 para bigramas, por exemplo), o modelo teve um nível de acerto bastante alto, além de não dar erro ao não encontrar o N-grama inserido.
-
-EXEMPLOS
-
-O verdadeiro problema deste modelo foi para frases grandes, já que o máximo que ele utiliza para a predição são as 3 últimas palavras da frase, ignorando completamente o contexto anterior. 
-
-EXEMPLOS
+O código abaixo mostra o desenvolvimento da etapa 2 do modelo.
 
 
-\section{Conclusão e Trabalhos Futuros}
 
-Desta maneira, é possível concluir que utilizando a biblioteca NLTK, em conjunto com um dataset rico em frases de uma determinada língua, e o modelo de N-gramas, é possível fazer um preditor de palavras de texto bastante eficaz, e preciso, podendo facilmente ser utilizado na prática.
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{c+c1}{\PYZsh{} Utiliza\PYZhy{}se o módulo counter para obter as contagens de cada N\PYZhy{}grama}
+\PY{k+kn}{from} \PY{n+nn}{collections} \PY{k+kn}{import} \PY{n}{Counter}
+\PY{n}{n2}\PY{p}{,} \PY{n}{n3}\PY{p}{,} \PY{n}{n4} \PY{o}{=} \PY{n}{Counter}\PY{p}{(}\PY{n}{bigrams}\PY{p}{)}\PY{p}{,} \PY{n}{Counter}\PY{p}{(}\PY{n}{trigrams}\PY{p}{)}\PY{p}{,} \PY{n}{Counter}\PY{p}{(}\PY{n}{fourgrams}\PY{p}{)}
 
-Analisando os resultados é possível afirmar, também que este preditor pode ser melhorado ao considerar N-gramas maiores, e as frases grande como um todo, e não apenas o seu último N-grama.
+\PY{c+c1}{\PYZsh{} Gera\PYZhy{}se os casos únicos para os bigramas, os trigramas e os quadrigramas}
+\PY{n}{s2}\PY{p}{,} \PY{n}{s3}\PY{p}{,} \PY{n}{s4} \PY{o}{=} \PY{n+nb}{set}\PY{p}{(}\PY{n}{bigrams}\PY{p}{)}\PY{p}{,} \PY{n+nb}{set}\PY{p}{(}\PY{n}{trigrams}\PY{p}{)}\PY{p}{,} \PY{n+nb}{set}\PY{p}{(}\PY{n}{fourgrams}\PY{p}{)}
 
-Além disso, seria possível adicionar uma feature de input em tempo real, para que o sugestor já tente prever a próxima palavra de um texto no mesmo tempo em que ele está sendo digitado.
+\PY{c+c1}{\PYZsh{} Utilizando a fórmula de probabilidades}
+\PY{n}{p2} \PY{o}{=} \PY{p}{[}\PY{p}{(}\PY{n}{n}\PY{p}{,} \PY{p}{(}\PY{n}{n2}\PY{p}{[}\PY{n}{n}\PY{p}{]} \PY{o}{+} \PY{l+m+mi}{1}\PY{p}{)}\PY{o}{/}\PY{p}{(}\PY{n+nb}{len}\PY{p}{(}\PY{n}{n2}\PY{p}{)} \PY{o}{+} \PY{n+nb}{len}\PY{p}{(}\PY{n}{s2}\PY{p}{)}\PY{p}{)}\PY{p}{)} \PY{k}{for} \PY{n}{n} \PY{o+ow}{in} \PY{n}{s2}\PY{p}{]}
+\PY{n}{p3} \PY{o}{=} \PY{p}{[}\PY{p}{(}\PY{n}{n}\PY{p}{,} \PY{p}{(}\PY{n}{n3}\PY{p}{[}\PY{n}{n}\PY{p}{]} \PY{o}{+} \PY{l+m+mi}{1}\PY{p}{)}\PY{o}{/}\PY{p}{(}\PY{n+nb}{len}\PY{p}{(}\PY{n}{n3}\PY{p}{)} \PY{o}{+} \PY{n+nb}{len}\PY{p}{(}\PY{n}{s3}\PY{p}{)}\PY{p}{)}\PY{p}{)} \PY{k}{for} \PY{n}{n} \PY{o+ow}{in} \PY{n}{s3}\PY{p}{]}
+\PY{n}{p4} \PY{o}{=} \PY{p}{[}\PY{p}{(}\PY{n}{n}\PY{p}{,} \PY{p}{(}\PY{n}{n4}\PY{p}{[}\PY{n}{n}\PY{p}{]} \PY{o}{+} \PY{l+m+mi}{1}\PY{p}{)}\PY{o}{/}\PY{p}{(}\PY{n+nb}{len}\PY{p}{(}\PY{n}{n4}\PY{p}{)} \PY{o}{+} \PY{n+nb}{len}\PY{p}{(}\PY{n}{s4}\PY{p}{)}\PY{p}{)}\PY{p}{)} \PY{k}{for} \PY{n}{n} \PY{o+ow}{in} \PY{n}{s4}\PY{p}{]}
 
-Para fazer o mesmo autocomplete para outras línguas, seria necessário apenas fazer uma limpeza diferente nas frases, como cada língua possui peculiaridades a serem consideradas, mas não é uma tarefa muito complexa.
+\PY{c+c1}{\PYZsh{} Ordena\PYZhy{}se as listas de acordo com a probabilidade de cada N\PYZhy{}grama}
+\PY{c+c1}{\PYZsh{} em ordem descrescente}
+\PY{n}{p2} \PY{o}{=} \PY{n+nb}{sorted}\PY{p}{(}\PY{n}{p2}\PY{p}{,} \PY{n}{key}\PY{o}{=}\PY{k}{lambda} \PY{n}{w}\PY{p}{:} \PY{n}{w}\PY{p}{[}\PY{l+m+mi}{1}\PY{p}{]}\PY{p}{,} \PY{n}{reverse}\PY{o}{=}\PY{k+kc}{True}\PY{p}{)}
+\PY{n}{p3} \PY{o}{=} \PY{n+nb}{sorted}\PY{p}{(}\PY{n}{p3}\PY{p}{,} \PY{n}{key}\PY{o}{=}\PY{k}{lambda} \PY{n}{w}\PY{p}{:} \PY{n}{w}\PY{p}{[}\PY{l+m+mi}{1}\PY{p}{]}\PY{p}{,} \PY{n}{reverse}\PY{o}{=}\PY{k+kc}{True}\PY{p}{)}
+\PY{n}{p4} \PY{o}{=} \PY{n+nb}{sorted}\PY{p}{(}\PY{n}{p4}\PY{p}{,} \PY{n}{key}\PY{o}{=}\PY{k}{lambda} \PY{n}{w}\PY{p}{:} \PY{n}{w}\PY{p}{[}\PY{l+m+mi}{1}\PY{p}{]}\PY{p}{,} \PY{n}{reverse}\PY{o}{=}\PY{k+kc}{True}\PY{p}{)}
+\end{Verbatim}
 
+
+\subsection{Gerando a predição}
+
+Para realizar a predição da próxima palavra a ser digitada em um texto, criou-se uma função que recebe como entrada:
+\begin{itemize}
+    \item uma string;
+    \item um inteiro n que define as n primeiras palavras mais prováveis a serem retornadas pelo preditor;
+    \item um inteiro model que define o modelo de N-gramas a ser utilizado (que por padrão utiliza os bigramas);
+\end{itemize}
+
+O bloco abaixo mostra o código da função.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{k}{def} \PY{n+nf}{return\PYZus{}prediction}\PY{p}{(}\PY{n}{inp}\PY{p}{,} \PY{n}{n}\PY{p}{,} \PY{n}{model}\PY{o}{=}\PY{l+m+mi}{2}\PY{p}{)}\PY{p}{:}
+    \PY{c+c1}{\PYZsh{} Lista de possiveis palavras}
+    \PY{n}{pred} \PY{o}{=} \PY{p}{[}\PY{p}{]}
+    
+    \PY{c+c1}{\PYZsh{} Tokenizando o input}
+    \PY{n}{inp} \PY{o}{=} \PY{n}{word\PYZus{}tokenize}\PY{p}{(}\PY{n}{inp}\PY{p}{)}
+    
+    \PY{c+c1}{\PYZsh{} Modelo escolhido}
+    \PY{n}{p} \PY{o}{=} \PY{k+kc}{None}
+    
+    \PY{k}{if} \PY{n}{model} \PY{o}{==} \PY{l+m+mi}{2}\PY{p}{:}
+        \PY{n}{p} \PY{o}{=} \PY{n}{p2}
+        
+    \PY{k}{elif} \PY{n}{model} \PY{o}{==} \PY{l+m+mi}{3}\PY{p}{:}
+        \PY{n}{p} \PY{o}{=} \PY{n}{p3}
+                
+    \PY{k}{elif} \PY{n}{model} \PY{o}{==} \PY{l+m+mi}{4}\PY{p}{:}
+        \PY{n}{p} \PY{o}{=} \PY{n}{p4}
+    
+    \PY{c+c1}{\PYZsh{} Se a quantidade de palavras do input for menor que o tamanho do modelo }
+    \PY{c+c1}{\PYZsh{} escolhido não é possível formar um N\PYZhy{}grama.}
+    \PY{c+c1}{\PYZsh{} Logo, devemos retornar um erro.}
+    \PY{k}{if} \PY{n+nb}{len}\PY{p}{(}\PY{n}{inp}\PY{p}{)} \PY{o}{\PYZlt{}} \PY{n}{model} \PY{o}{\PYZhy{}} \PY{l+m+mi}{1}\PY{p}{:}
+        \PY{k}{return} \PY{l+s+sa}{f}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{Could not form a n\PYZhy{}gram of size }\PY{l+s+si}{\PYZob{}}\PY{n}{model}\PY{l+s+si}{\PYZcb{}}\PY{l+s+s2}{ with given input.}\PY{l+s+s2}{\PYZdq{}}
+
+    \PY{c+c1}{\PYZsh{} Forma\PYZhy{}se os N\PYZhy{}gramas de tamanho model \PYZhy{} 1}
+    \PY{n}{in\PYZus{}ngram} \PY{o}{=} \PY{n+nb}{list}\PY{p}{(}\PY{n}{ngrams}\PY{p}{(}\PY{n}{inp}\PY{p}{,} \PY{n}{model} \PY{o}{\PYZhy{}} \PY{l+m+mi}{1}\PY{p}{)}\PY{p}{)}
+
+    \PY{c+c1}{\PYZsh{} Pega\PYZhy{}se o último dos N\PYZhy{}gramas do input, pois nosso modelo irá buscar }
+    \PY{c+c1}{\PYZsh{} o N\PYZhy{}grama mais provável que encaixa para ele}
+
+    \PY{c+c1}{\PYZsh{} Por exemplo: se a entrada é \PYZdq{}i want to\PYZdq{} e o nosso modelo é }
+    \PY{c+c1}{\PYZsh{} de tamanho 2, utilizaremos o N\PYZhy{}grama (\PYZdq{}to\PYZdq{})}
+    \PY{n}{in\PYZus{}ngram} \PY{o}{=} \PY{n}{in\PYZus{}ngram}\PY{p}{[}\PY{o}{\PYZhy{}}\PY{l+m+mi}{1}\PY{p}{]}
+    
+    \PY{c+c1}{\PYZsh{} Quantidade de palavras que podem encaixar na frase}
+    \PY{n}{count} \PY{o}{=} \PY{l+m+mi}{0}
+    
+    \PY{c+c1}{\PYZsh{} Iterando sobre cada uma das tuplas (N\PYZhy{}grama, probabilidade) do modelo}
+    \PY{k}{for} \PY{n}{wp} \PY{o+ow}{in} \PY{n}{p}\PY{p}{:}
+        \PY{c+c1}{\PYZsh{} Seleciona\PYZhy{}se apenas o N\PYZhy{}grama}
+        \PY{n}{p\PYZus{}ngram} \PY{o}{=} \PY{n}{wp}\PY{p}{[}\PY{l+m+mi}{0}\PY{p}{]}
+
+        \PY{c+c1}{\PYZsh{} Remove\PYZhy{}se a última palavra do N\PYZhy{}grama, de modo a obter um N\PYZhy{}grama }
+        \PY{c+c1}{\PYZsh{} de tamanho igual ao N\PYZhy{}grama gerado para nossa entrada}
+        \PY{n}{model\PYZus{}ngram} \PY{o}{=} \PY{n}{p\PYZus{}ngram}\PY{p}{[}\PY{p}{:}\PY{o}{\PYZhy{}}\PY{l+m+mi}{1}\PY{p}{]}
+
+        \PY{c+c1}{\PYZsh{} Voltando ao exemplo anterior, podemos encontrar um N\PYZhy{}grama }
+        \PY{c+c1}{\PYZsh{} do tipo (\PYZdq{}to\PYZdq{}, \PYZdq{}do\PYZdq{}). Removendo\PYZhy{}se a última palavra, }
+        \PY{c+c1}{\PYZsh{} teremos um N\PYZhy{}grama (\PYZdq{}to\PYZdq{}), que é igual ao nosso }
+        \PY{c+c1}{\PYZsh{} N\PYZhy{}grama da entrada}
+
+        \PY{c+c1}{\PYZsh{} Se o N\PYZhy{}grama do modelo é igual ao N\PYZhy{}grama da entrada}
+        \PY{c+c1}{\PYZsh{} tivemos um match}
+        \PY{k}{if} \PY{n}{model\PYZus{}ngram} \PY{o}{==} \PY{n}{in\PYZus{}ngram}\PY{p}{:}
+            \PY{n}{count} \PY{o}{+}\PY{o}{=} \PY{l+m+mi}{1}
+            
+            \PY{c+c1}{\PYZsh{} Seleciona\PYZhy{}se apenas a última palavra do N\PYZhy{}grama do modelo}
+            \PY{c+c1}{\PYZsh{} e faz\PYZhy{}se o replace do hífen artificial pela apóstrofe}
+            \PY{n}{match} \PY{o}{=} \PY{n}{p\PYZus{}ngram}\PY{p}{[}\PY{o}{\PYZhy{}}\PY{l+m+mi}{1}\PY{p}{]}\PY{o}{.}\PY{n}{replace}\PY{p}{(}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZhy{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{,} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{\PYZsq{}}\PY{l+s+s2}{\PYZdq{}}\PY{p}{)}
+            \PY{n}{pred}\PY{o}{.}\PY{n}{append}\PY{p}{(}\PY{n}{match}\PY{p}{)}
+            
+            \PY{c+c1}{\PYZsh{} Novamente utilizando o exemplo anterior, como tivemos um }
+            \PY{c+c1}{\PYZsh{} match, o modelo assume que queriamos o N\PYZhy{}grama }
+            \PY{c+c1}{\PYZsh{} (\PYZdq{}to\PYZdq{}, \PYZdq{}do\PYZdq{}); logo, preenche a frase }
+            \PY{c+c1}{\PYZsh{} \PYZdq{}i want to\PYZdq{} com a palavra \PYZdq{}do\PYZdq{}}
+
+            \PY{c+c1}{\PYZsh{} Se obtivemos o número exigido de palavras, quebra o loop}
+            \PY{k}{if} \PY{n}{count} \PY{o}{==} \PY{n}{n}\PY{p}{:}
+                \PY{k}{break}
+                
+    \PY{c+c1}{\PYZsh{} Se não conseguimos obter palavras suficentes}
+    \PY{c+c1}{\PYZsh{} preenche\PYZhy{}se a lista com N/A}
+    \PY{k}{if} \PY{n}{count} \PY{o}{\PYZlt{}} \PY{n}{n}\PY{p}{:}
+        \PY{n}{pred} \PY{o}{+}\PY{o}{=} \PY{p}{[}\PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{N/A}\PY{l+s+s2}{\PYZdq{}}\PY{p}{]} \PY{o}{*} \PY{p}{(}\PY{n}{n} \PY{o}{\PYZhy{}} \PY{n}{count}\PY{p}{)}
+    
+    \PY{k}{return} \PY{n}{pred}
+\end{Verbatim}
+
+
+\section{Testando o modelo}
+
+Para testar o modelo, utilizou-se a frase "i want to" (em letras minúsculas pois os dados estão em lowercase), escolheu-se obter as 5 primeiras palavras, e escolheu-se o modelo de trigramas.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{n}{example} \PY{o}{=} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{i want to}\PY{l+s+s2}{\PYZdq{}}
+\PY{n}{pred} \PY{o}{=} \PY{n}{return\PYZus{}prediction}\PY{p}{(}\PY{n}{example}\PY{p}{,} \PY{n}{n}\PY{o}{=}\PY{l+m+mi}{5}\PY{p}{,} \PY{n}{model}\PY{o}{=}\PY{l+m+mi}{3}\PY{p}{)}
+
+\PY{k}{for} \PY{n}{word} \PY{o+ow}{in} \PY{n}{pred}\PY{p}{:}
+    \PY{n+nb}{print}\PY{p}{(}\PY{n}{example} \PY{o}{+} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{ }\PY{l+s+s2}{\PYZdq{}} \PY{o}{+} \PY{n}{word}\PY{p}{)}
+\end{Verbatim}
+
+\begin{Verbatim}[commandchars=\\\{\},frame=leftline,fontsize=\small, xleftmargin=0.5em]
+i want to be
+i want to see
+i want to do
+i want to go
+i want to make
+\end{Verbatim}
+
+
+Como mencionado anteriormente porém, o modelo nem sempre é preciso. O exemplo abaixo utiliza a frase "let me see your" e um modelo de quadrigramas.
+
+
+
+\begin{Verbatim}[commandchars=\\\{\},frame=single,fontsize=\small, xleftmargin=0.5em]
+\PY{n}{example} \PY{o}{=} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{let me see your}\PY{l+s+s2}{\PYZdq{}}
+\PY{n}{pred} \PY{o}{=} \PY{n}{return\PYZus{}prediction}\PY{p}{(}\PY{n}{example}\PY{p}{,} \PY{n}{n}\PY{o}{=}\PY{l+m+mi}{5}\PY{p}{,} \PY{n}{model}\PY{o}{=}\PY{l+m+mi}{4}\PY{p}{)}
+
+\PY{k}{for} \PY{n}{word} \PY{o+ow}{in} \PY{n}{pred}\PY{p}{:}
+    \PY{n+nb}{print}\PY{p}{(}\PY{n}{example} \PY{o}{+} \PY{l+s+s2}{\PYZdq{}}\PY{l+s+s2}{ }\PY{l+s+s2}{\PYZdq{}} \PY{o}{+} \PY{n}{word}\PY{p}{)}
+\end{Verbatim}
+
+\begin{Verbatim}[commandchars=\\\{\},frame=leftline,fontsize=\small, xleftmargin=0.5em]
+let me see your N/A
+let me see your N/A
+let me see your N/A
+let me see your N/A
+let me see your N/A
+\end{Verbatim}
+
+
+\section{Conclusão e iterações futuras}
+
+É possível concluir que a partir de um modelo de N-gramas é possível fazer um preditor de palavras de texto eficaz e prático.
+Todavia, o modelo não é muito preciso, especialmente para frases grandes e para modelos de quadrigramas. 
+Outro problema é que o modelo não considera o contexto completo da frase, e seleciona-se apenas as últimas palavras desta para gerar a predição.
+
+Para melhorar algumas destas falhas, pode-se considerar construir N-gramas maiores para gerar modelos mais precisos.
+Além disso, poderia-se implementar um sistema de retroalimentação da base de dados, de modo a fornecer mais dados.
+
+A ferramenta também poderia receber novas features. Um exemplo interessante seria o uso de um sistema de input em tempo real, de modo que o usuário tenha uma experiência mais suave e agradável.
+
+Além disso, pode-se implementar o uso de outras linguagens no modelo. 
+Para tal, seriam necessários ajustes no pré-processamento e limpeza dos dados, e também seria necessário obter as stopwords da nova língua.
 
 \end{document}
-
-
-
