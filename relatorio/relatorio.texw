@@ -509,4 +509,14 @@ A ferramenta também poderia receber novas features. Um exemplo interessante ser
 Além disso, pode-se implementar o uso de outras linguagens no modelo. 
 Para tal, seriam necessários ajustes no pré-processamento e limpeza dos dados, e também seria necessário obter as stopwords da nova língua.
 
+\section{Bibliografia}
+
+[1] Old newspapers - https://www.kaggle.com/alvations/old-newspapers
+
+[2] Documentação do NLTK - https://www.nltk.org/index.html
+
+[3] Understanding Word N-grams and N-gram Probability in Natural Language Processing - https://towardsdatascience.com/understanding-word-n-grams-and-n-gram-probability-in-natural-language-processing-9d9eef0fa058
+
+[4] N-gram Language Models - https://towardsdatascience.com/n-gram-language-models-af6085435eeb
+
 \end{document}
